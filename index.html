@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Grain QR — Quality & Purchases</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,Segoe UI,Roboto,'Noto Sans',arial;}
+    body{max-width:1000px;margin:24px auto;padding:18px;background:#fbfbfb;color:#111}
+    header{display:flex;align-items:center;gap:12px}
+    h1{font-size:20px;margin:0}
+    .card{background:white;border-radius:12px;padding:16px;margin-top:14px;box-shadow:0 6px 18px rgba(20,20,40,0.06)}
+    .flex{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    label{display:block;margin-bottom:6px;font-weight:600}
+    input,select,button{padding:8px 10px;border-radius:8px;border:1px solid #ddd}
+    button{cursor:pointer}
+    #qr-area{display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+    .qr-box{display:flex;flex-direction:column;align-items:center;gap:8px}
+    small{color:#666}
+    .info{font-size:15px}
+    pre{background:#f6f6f8;padding:10px;border-radius:8px;overflow:auto}
+    .muted{color:#666;font-size:13px}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🌾 Grain QR — Quality & Purchases</h1>
+  </header>
+
+  <div class="card">
+    <div class="flex">
+      <div style="flex:1">
+        <label>Batch ID:</label>
+        <select id="batchSelect"></select>
+        <div class="muted" style="margin-top:8px">Select existing batch or add new</div>
+      </div>
+      <div style="width:260px">
+        <label>New Batch ID:</label>
+        <input id="newBatch" placeholder="e.g. BATCH005" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;justify-content:flex-end">
+        <button id="addBatchBtn">Add / Update Batch</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="info">
+      <strong>Quality</strong> / <strong>Purchases</strong>
+    </div>
+
+    <div id="qr-area" style="margin-top:12px">
+      <div class="qr-box">
+        <div id="qrcodeQuality"></div>
+        <div><strong>Quality QR</strong></div>
+        <small>Scan to view quality info</small>
+        <button id="downloadQuality">Download PNG</button>
+      </div>
+
+      <div class="qr-box">
+        <div id="qrcodePurchases"></div>
+        <div><strong>Purchases QR</strong></div>
+        <small>Scan to view purchase info</small>
+        <button id="downloadPurchases">Download PNG</button>
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <div class="muted">Direct demo links:</div>
+      <pre id="demoLinks">--</pre>
+    </div>
+  </div>
+
+  <div class="card" id="dataViewer" style="display:none">
+    <div id="viewerContent"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script>
+    // ✅ Load database from localStorage or set default
+    const saved = localStorage.getItem('grainDB');
+    const db = saved ? JSON.parse(saved) : {
+      'BATCH001': { grain: 'Wheat', moisture: '12%', protein: '11%', color: 'Golden', purchases: 34, lastTest: '2025-11-01' },
+      'BATCH002': { grain: 'Rice', moisture: '13.5%', protein: '7.5%', color: 'White', purchases: 12, lastTest: '2025-10-21' },
+      'BATCH003': { grain: 'Maize', moisture: '11%', protein: '9%', color: 'Yellow', purchases: 5, lastTest: '2025-09-18' }
+    };
+
+    function saveDB() {
+      localStorage.setItem('grainDB', JSON.stringify(db));
+    }
+
+    // ✅ Replace this with your hosted URL when deployed
+    function baseURL() {
+  return "https://shivammaurya-tech.github.io/Quality-Check-QRScanner/";
+}
+
+    // populate select
+    const batchSelect = document.getElementById('batchSelect');
+    function refreshBatchOptions() {
+      batchSelect.innerHTML = '';
+      Object.keys(db).forEach(id => {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = id + ' — ' + db[id].grain;
+        batchSelect.appendChild(opt);
+      });
+    }
+    refreshBatchOptions();
+
+    // generate QRs
+    let qrQ, qrP;
+    function generateQRs(batchId) {
+      const qualityURL = baseURL() + '#quality?id=' + encodeURIComponent(batchId);
+      const purchasesURL = baseURL() + '#purchases?id=' + encodeURIComponent(batchId);
+
+      document.getElementById('qrcodeQuality').innerHTML = '';
+      document.getElementById('qrcodePurchases').innerHTML = '';
+
+      qrQ = new QRCode(document.getElementById('qrcodeQuality'), { text: qualityURL, width: 160, height: 160 });
+      qrP = new QRCode(document.getElementById('qrcodePurchases'), { text: purchasesURL, width: 160, height: 160 });
+
+      document.getElementById('demoLinks').textContent =
+        'Quality link: ' + qualityURL + '\nPurchases link: ' + purchasesURL;
+    }
+
+    generateQRs(Object.keys(db)[0]);
+    batchSelect.addEventListener('change', e => generateQRs(e.target.value));
+
+    // add new batch
+    document.getElementById('addBatchBtn').addEventListener('click', () => {
+      const newId = (document.getElementById('newBatch').value || '').trim();
+      if (!newId) return alert('Please enter Batch ID');
+      db[newId] = { grain: 'Unknown', moisture: '-', protein: '-', color: '-', purchases: 0, lastTest: '-' };
+      saveDB();
+      refreshBatchOptions();
+      batchSelect.value = newId;
+      generateQRs(newId);
+      document.getElementById('newBatch').value = '';
+      alert('Batch added successfully!');
+    });
+
+    // download QR
+    function downloadQR(containerId, filename) {
+      const c = document.getElementById(containerId);
+      const img = c.querySelector('img');
+      const canvas = c.querySelector('canvas');
+      const dataURL = img ? img.src : canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataURL;
+      a.download = filename;
+      a.click();
+    }
+    document.getElementById('downloadQuality').onclick = () => downloadQR('qrcodeQuality', 'quality-qr.png');
+    document.getElementById('downloadPurchases').onclick = () => downloadQR('qrcodePurchases', 'purchases-qr.png');
+
+    // ===== Router (QR opens these routes) =====
+    function showViewer(html) {
+      document.getElementById('viewerContent').innerHTML = html;
+      document.getElementById('dataViewer').style.display = 'block';
+      setTimeout(() => document.getElementById('dataViewer').scrollIntoView({behavior:'smooth'}), 50);
+    }
+
+    function renderQuality(id) {
+      const rec = db[id];
+      if (!rec) return showViewer(`<h3>Batch ID: ${id}</h3><div class="muted">Record not found.</div>`);
+      showViewer(`
+        <h2>Quality Report — ${id}</h2>
+        <div class="muted">Last tested: ${rec.lastTest}</div>
+        <ul>
+          <li><strong>Grain:</strong> ${rec.grain}</li>
+          <li><strong>Moisture:</strong> ${rec.moisture}</li>
+          <li><strong>Protein:</strong> ${rec.protein}</li>
+          <li><strong>Color:</strong> ${rec.color}</li>
+        </ul>
+      `);
+    }
+
+    function renderPurchases(id) {
+      const rec = db[id];
+      if (!rec) return showViewer(`<h3>Batch ID: ${id}</h3><div class="muted">Record not found.</div>`);
+      showViewer(`
+        <h2>Purchases — ${id}</h2>
+        <p><strong>Total purchases:</strong> ${rec.purchases}</p>
+      `);
+    }
+
+    function handleRoute() {
+      const hash = location.hash;
+      if (!hash) return;
+      const [route, query] = hash.slice(1).split('?');
+      const params = new URLSearchParams(query);
+      const id = params.get('id');
+      if (route === 'quality') renderQuality(id);
+      else if (route === 'purchases') renderPurchases(id);
+    }
+
+    window.addEventListener('hashchange', handleRoute);
+    handleRoute();
+  </script>
+</body>
+</html>
